@@ -1,1 +1,56 @@
+name: Build and Release r8-bininspect
 
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install MinGW-w64 cross-compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Build Linux x86-64 binary (ELF64)
+        run: |
+          gcc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror \
+            -o r8-bininspect-linux-x86_64 \
+            src/main.c src/elf_parser.c src/pe_parser.c src/hex_view.c -lm
+
+      - name: Build Windows x86-64 binary (PE32+)
+        run: |
+          x86_64-w64-mingw32-gcc -std=c11 -O2 -Wall -Wextra -Wpedantic -Werror -static \
+            -o r8-bininspect-windows-x86_64.exe \
+            src/main.c src/elf_parser.c src/pe_parser.c src/hex_view.c -lm
+
+      - name: Self-test on both ELF64 and PE32+ outputs
+        run: |
+          echo "=== Testing ELF64 Inspection ==="
+          ./r8-bininspect-linux-x86_64 ./r8-bininspect-linux-x86_64 --hex --len 64 --no-color
+          echo "=== Testing PE32+ Inspection ==="
+          ./r8-bininspect-linux-x86_64 ./r8-bininspect-windows-x86_64.exe --no-color
+
+      - name: Publish Permanent GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Release (Linux & Windows)
+          body: |
+            Automated cross-platform C11 builds by **R8Force**:
+            - **`r8-bininspect-linux-x86_64`** — Standalone Linux x86-64 binary
+            - **`r8-bininspect-windows-x86_64.exe`** — Standalone Windows x86-64 binary
+          make_latest: true
+          files: |
+            r8-bininspect-linux-x86_64
+            r8-bininspect-windows-x86_64.exe
